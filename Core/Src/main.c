@@ -35,14 +35,24 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define TEMP_SENSOR_AVG_SLOPE_MV_PER_CELSIUS 2.5f
+#define TEMP_SENSOR_VOLTAGE_MV_AT_25 760.0f
+#define ADC_REFERENCE_VOLTAGE_MV 3300.0f
+#define ADC_MAX_OUTPUT_VALUE 4095.0f
+#define TEMP110_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFF75CA))
+#define TEMP30_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFF75A8))
+#define TEMP110 110.0f
+#define TEMP30 30.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+uint32_t sensorValue;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 ETH_HandleTypeDef heth;
 
 UART_HandleTypeDef huart5;
@@ -61,6 +71,7 @@ static void MX_ETH_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_UART5_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -77,10 +88,7 @@ static void MX_UART5_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  uint8_t data[] = "HELLO WORLD \r\n";
-  uint8_t Rx_data[10];
-  uint16_t checksum = 0;
-  HAL_StatusTypeDef hal_state;
+  uint8_t buff[124] = {0};
 
   /* USER CODE END 1 */
 
@@ -106,60 +114,36 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   MX_UART5_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-
+  if (HAL_ADC_Start(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Dimeeriza o led pela uart
-	for(int i = 0; i < 255; i++)
-  {
-    if((UART5->SR & USART_SR_TXE) && (i < (255/2)))
+    if (HAL_ADC_PollForConversion(&hadc1, 10) != HAL_OK)
     {
-      UART5->DR = 0;
+      Error_Handler();
     }
-    else if((UART5->SR & USART_SR_TXE) && (i >= (255/2)))
+    /* USER CODE END WHILE */
+    /* Read the converted value */
+    sensorValue = HAL_ADC_GetValue(&hadc1);
+
+    int32_t TemperatureValue = (int32_t)(((TEMP110 - TEMP30)) / ((float)(*TEMP110_CAL_VALUE) - (float)(*TEMP30_CAL_VALUE)) * (sensorValue - (float)(*TEMP30_CAL_VALUE)) + TEMP30);
+ 
+    if(HAL_UART_Receive(&huart5, buff, sizeof(buff), 100))
     {
-      UART5->DR = 1;
-    }
-  }
+      snprintf(buff, sizeof(buff), "%ld\r\n", TemperatureValue);
 
-    // Endia dado usando HAL
-    HAL_UART_Transmit(&huart5, data, sizeof(data), 10);
-
-    // toggle LED
-    HAL_GPIO_TogglePin(GPIOB, LD1_Pin); // toggle LED
-
-    HAL_UART_Receive(&huart5, Rx_data, 4, 100);
-
-    // Verifica se fim da string após 100ms
-    if(hal_state == HAL_TIMEOUT)
-    {
-      // fim de string
+      HAL_UART_Transmit_IT(&huart5, buff, sizeof(buff));
     }
 
-    for (int j = 0; j < sizeof(Rx_data); j++)
-    {
-      if ((Rx_data[j] > 64 || Rx_data[j] < 91) || (Rx_data[j] > 96 || Rx_data[j] < 123))
-      {
-        // É caracter
-      }
-      else if (Rx_data[j] > 47 || Rx_data[j] < 58)
-      {
-        // É um número
-      }
-      else
-      {
-        // É simbolo
-      }
-
-      // Calcula o check sum da string recebido pela UART
-      checksum += Rx_data[j];
-    }
-    
+    HAL_Delay(1000);
   }
 
   /* USER CODE END WHILE */
@@ -211,6 +195,55 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_10;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+}
+
+/**
   * @brief ETH Initialization Function
   * @param None
   * @retval None
@@ -247,7 +280,7 @@ static void MX_ETH_Init(void)
 
   /* USER CODE END MACADDRESS */
 
-  if (HAL_ETH_Init(&heth) != HAL_OK && HAL_ETH_Init(&heth) != HAL_TIMEOUT)
+  if (HAL_ETH_Init(&heth) != HAL_OK)
   {
     Error_Handler();
   }
