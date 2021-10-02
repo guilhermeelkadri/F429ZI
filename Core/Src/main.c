@@ -77,10 +77,6 @@ static void MX_UART5_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  uint8_t data[] = "HELLO WORLD \r\n";
-  uint8_t Rx_data[10];
-  uint16_t checksum = 0;
-  HAL_StatusTypeDef hal_state;
 
   /* USER CODE END 1 */
 
@@ -114,51 +110,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Dimeeriza o led pela uart
-	for(int i = 0; i < 255; i++)
-  {
-    if((UART5->SR & USART_SR_TXE) && (i < (255/2)))
-    {
-      UART5->DR = 0;
-    }
-    else if((UART5->SR & USART_SR_TXE) && (i >= (255/2)))
-    {
-      UART5->DR = 1;
-    }
-  }
-
-    // Endia dado usando HAL
-    HAL_UART_Transmit(&huart5, data, sizeof(data), 10);
-
-    // toggle LED
-    HAL_GPIO_TogglePin(GPIOB, LD1_Pin); // toggle LED
-
-    HAL_UART_Receive(&huart5, Rx_data, 4, 100);
-
-    // Verifica se fim da string após 100ms
-    if(hal_state == HAL_TIMEOUT)
-    {
-      // fim de string
-    }
-
-    for (int j = 0; j < sizeof(Rx_data); j++)
-    {
-      if ((Rx_data[j] > 64 || Rx_data[j] < 91) || (Rx_data[j] > 96 || Rx_data[j] < 123))
-      {
-        // É caracter
-      }
-      else if (Rx_data[j] > 47 || Rx_data[j] < 58)
-      {
-        // É um número
-      }
-      else
-      {
-        // É simbolo
-      }
-
-      // Calcula o check sum da string recebido pela UART
-      checksum += Rx_data[j];
-    }
     
   }
 
